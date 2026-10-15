@@ -204,8 +204,183 @@ def entries_to_technical_script(entries: List[Dict[str, Any]], title: str = "Fil
 
     doc_lines.append("")
     doc_lines.append("=" * 80)
-    doc_lines.append("Gerado automaticamente por SONAR LSE Studio — Tecnologia Asza Company")
+    doc_lines.append("Gerado por SONAR LSE STUDIO — Workstation Interna Sonar Acessibilidade")
     doc_lines.append("=" * 80)
 
     return "\n".join(doc_lines)
+
+
+def validate_subtitles_compliance(entries: List[Dict[str, Any]], mode: str = "lse") -> Dict[str, Any]:
+    """
+    Audita as legendas conforme as normas ABNT NBR 15290 (LSE) e ABNT NBR 16452 (Audiodescrição).
+    Identifica sobreposições temporais, velocidade excessiva de leitura (CPS), linhas longas e durações anômalas.
+    """
+    warnings = []
+    errors = []
+    stats = {
+        "total_entries": len(entries),
+        "total_duration": 0.0,
+        "avg_cps": 0.0,
+        "max_cps": 0.0,
+        "overlaps_count": 0,
+        "long_lines_count": 0
+    }
+
+    if not entries:
+        return {
+            "score": 100,
+            "status": "clean",
+            "stats": stats,
+            "errors_count": 0,
+            "warnings_count": 0,
+            "errors": [],
+            "warnings": [],
+            "issues_by_entry": {}
+        }
+
+    total_chars = 0
+    total_time = 0.0
+    issues_by_entry = {}
+    prev_end_sec = 0.0
+
+    for idx, item in enumerate(entries):
+        entry_id = item.get("id", idx + 1)
+        text = item.get("text", "").strip()
+        start_sec = item.get("start_seconds", 0.0)
+        end_sec = item.get("end_seconds", 0.0)
+        duration = round(end_sec - start_sec, 3)
+
+        entry_issues = []
+
+        # 1. Checagem de sobreposição temporal (Overlap)
+        if idx > 0 and start_sec < prev_end_sec:
+            stats["overlaps_count"] += 1
+            overlap_gap = round(prev_end_sec - start_sec, 3)
+            err = {
+                "entry_id": entry_id,
+                "type": "error",
+                "code": "TIMECODE_OVERLAP",
+                "message": f"Sobreposição temporal de {overlap_gap}s com a legenda #{entries[idx-1].get('id', idx)}."
+            }
+            errors.append(err)
+            entry_issues.append(err)
+
+        # 2. Checagem de duração
+        if duration <= 0:
+            err = {
+                "entry_id": entry_id,
+                "type": "error",
+                "code": "INVALID_DURATION",
+                "message": "Duração inválida ou nula (fim menor ou igual ao início)."
+            }
+            errors.append(err)
+            entry_issues.append(err)
+        elif duration < 1.0:
+            warn = {
+                "entry_id": entry_id,
+                "type": "warning",
+                "code": "SHORT_DURATION",
+                "message": f"Duração curta ({duration}s). Mínimo recomendado é 1.0s para legibilidade."
+            }
+            warnings.append(warn)
+            entry_issues.append(warn)
+        elif duration > 7.0:
+            warn = {
+                "entry_id": entry_id,
+                "type": "warning",
+                "code": "LONG_DURATION",
+                "message": f"Duração longa ({duration}s). Considere dividir em blocos menores."
+            }
+            warnings.append(warn)
+            entry_issues.append(warn)
+
+        # 3. Velocidade de leitura (CPS - Caracteres por Segundo)
+        clean_text_len = len(re.sub(r"[\[\]\(\)\-]", "", text).strip())
+        if duration > 0:
+            cps = round(clean_text_len / duration, 1)
+            total_chars += clean_text_len
+            total_time += duration
+            if cps > stats["max_cps"]:
+                stats["max_cps"] = cps
+
+            cps_limit = 18.0 if mode == "audiodescricao" else 20.0
+            if cps > cps_limit:
+                warn = {
+                    "entry_id": entry_id,
+                    "type": "warning",
+                    "code": "HIGH_CPS",
+                    "message": f"Velocidade de leitura alta ({cps} CPS > {cps_limit} CPS)."
+                }
+                warnings.append(warn)
+                entry_issues.append(warn)
+
+        # 4. Limite de Caracteres por Linha (ABNT NBR 15290 - Máx 37 caracteres)
+        lines = text.split("\n")
+        has_long_line = False
+        for line in lines:
+            if len(line.strip()) > 37:
+                has_long_line = True
+                break
+        if has_long_line:
+            stats["long_lines_count"] += 1
+            warn = {
+                "entry_id": entry_id,
+                "type": "warning",
+                "code": "LINE_LENGTH_EXCEEDED",
+                "message": "Linha excede 37 caracteres (limite recomendado ABNT NBR 15290)."
+            }
+            warnings.append(warn)
+            entry_issues.append(warn)
+
+        if entry_issues:
+            issues_by_entry[entry_id] = entry_issues
+
+        prev_end_sec = max(prev_end_sec, end_sec)
+
+    stats["total_duration"] = round(total_time, 2)
+    stats["avg_cps"] = round(total_chars / total_time, 1) if total_time > 0 else 0.0
+
+    penalty = (len(errors) * 15) + (len(warnings) * 4)
+    score = max(0, 100 - penalty)
+
+    return {
+        "score": score,
+        "status": "perfect" if score >= 95 else "good" if score >= 80 else "attention",
+        "errors_count": len(errors),
+        "warnings_count": len(warnings),
+        "stats": stats,
+        "errors": errors,
+        "warnings": warnings,
+        "issues_by_entry": issues_by_entry
+    }
+
+
+def auto_fix_timecode_overlaps(entries: List[Dict[str, Any]], fps: float = 24.0, min_gap_seconds: float = 0.08) -> List[Dict[str, Any]]:
+    """
+    Corrige automaticamente sobreposições temporais e colisões de legendas,
+    assegurando intervalo de respiro mínimo entre blocos consecutivos.
+    """
+    import copy
+    fixed_entries = copy.deepcopy(entries)
+    fixed_entries.sort(key=lambda x: x.get("start_seconds", 0.0))
+
+    for idx in range(len(fixed_entries)):
+        if idx > 0:
+            prev = fixed_entries[idx - 1]
+            curr = fixed_entries[idx]
+            prev_end = prev.get("end_seconds", 0.0)
+            curr_start = curr.get("start_seconds", 0.0)
+
+            if curr_start <= prev_end:
+                new_prev_end = max(prev.get("start_seconds", 0.0) + 0.5, curr_start - min_gap_seconds)
+                prev["end_seconds"] = round(new_prev_end, 3)
+                prev["end"] = seconds_to_srt_time(new_prev_end)
+                prev["smpte_end"] = seconds_to_smpte(new_prev_end, fps)
+                prev["duration"] = round(new_prev_end - prev.get("start_seconds", 0.0), 2)
+
+    for idx, item in enumerate(fixed_entries, start=1):
+        item["id"] = idx
+
+    return fixed_entries
+
 

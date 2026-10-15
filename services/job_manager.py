@@ -14,7 +14,9 @@ from services.srt_formatter import (
     entries_to_srt,
     entries_to_vtt,
     parse_srt_to_entries,
-    entries_to_technical_script
+    entries_to_technical_script,
+    validate_subtitles_compliance,
+    auto_fix_timecode_overlaps
 )
 
 
@@ -120,12 +122,30 @@ class JobManager:
         return job_id
 
     def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
-        """Retorna o estado de um trabalho específico."""
+        """Retorna o estado de um trabalho específico enriquecido com auditoria ABNT."""
         with self.lock:
             job = self.jobs.get(job_id)
             if not job:
                 return None
-            return dict(job)
+            job_copy = dict(job)
+            if job_copy.get("entries"):
+                job_copy["compliance"] = validate_subtitles_compliance(job_copy["entries"], mode=job_copy.get("mode", "lse"))
+            return job_copy
+
+    def auto_fix_job_overlaps(self, job_id: str, fps: float = 24.0) -> Optional[Dict[str, Any]]:
+        """Corrige sobreposições temporais e registra snapshot no histórico."""
+        with self.lock:
+            job = self.jobs.get(job_id)
+            if not job or not job.get("entries"):
+                return None
+            fixed_entries = auto_fix_timecode_overlaps(job["entries"], fps=fps)
+
+        self.update_job_entries(job_id, fixed_entries, description="Correção automática de sobreposições ABNT")
+        return {
+            "success": True,
+            "entries": fixed_entries,
+            "compliance": validate_subtitles_compliance(fixed_entries, mode=job.get("mode", "lse"))
+        }
 
     def list_jobs(self) -> List[Dict[str, Any]]:
         """Retorna a lista de todos os trabalhos ordenados pelo mais recente."""

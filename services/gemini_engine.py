@@ -169,22 +169,30 @@ class GeminiLSEEngine:
             last_err = None
 
             for m in clean_models:
-                try:
-                    response = self.client.models.generate_content(
-                        model=m,
-                        contents=[uploaded_file, user_prompt],
-                        config=types.GenerateContentConfig(
-                            temperature=0.2,  # Baixa temperatura para precisão temporal e consistência
-                            top_p=0.95
+                for retry in range(2):
+                    try:
+                        response = self.client.models.generate_content(
+                            model=m,
+                            contents=[uploaded_file, user_prompt],
+                            config=types.GenerateContentConfig(
+                                temperature=0.2,  # Baixa temperatura para precisão temporal e consistência
+                                top_p=0.95
+                            )
                         )
-                    )
-                    if response and response.text:
-                        raw_response_text = response.text
-                        active_model = m
-                        break
-                except Exception as ex:
-                    last_err = ex
-                    continue
+                        if response and response.text:
+                            raw_response_text = response.text
+                            active_model = m
+                            break
+                    except Exception as ex:
+                        last_err = ex
+                        err_str = str(ex).lower()
+                        if "429" in err_str or "quota" in err_str or "resourceexhausted" in err_str:
+                            time.sleep(2.5 * (retry + 1))
+                            continue
+                        else:
+                            break
+                if raw_response_text:
+                    break
 
             if not raw_response_text:
                 raise RuntimeError(f"A API Gemini não retornou texto válido. Último erro: {last_err}")

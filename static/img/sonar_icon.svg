@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" fill="none">
+  <defs>
+    <!-- Gradientes Principais Sonar -->
+    <linearGradient id="sonarGlowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f43f5e"/>
+      <stop offset="50%" stop-color="#ec4899"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+
+    <linearGradient id="sonarCyanGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#06b6d4"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+
+    <linearGradient id="sonarBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#11131a"/>
+      <stop offset="50%" stop-color="#090a0f"/>
+      <stop offset="100%" stop-color="#050608"/>
+    </linearGradient>
+
+    <radialGradient id="sonarCenterGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#f43f5e" stop-opacity="0.35"/>
+      <stop offset="60%" stop-color="#06b6d4" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+
+    <filter id="glowFilter" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="softGlow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="1.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Fundo Circular Obsidiana -->
+  <circle cx="64" cy="64" r="60" fill="url(#sonarBgGrad)" stroke="rgba(255, 255, 255, 0.08)" stroke-width="1.5"/>
+  <circle cx="64" cy="64" r="50" fill="url(#sonarCenterGlow)"/>
+
+  <!-- Anel Acústico Externo (Radar Sonar) com traço fino -->
+  <circle cx="64" cy="64" r="52" stroke="rgba(6, 182, 212, 0.25)" stroke-width="1" stroke-dasharray="3 6"/>
+  
+  <!-- Arcos de Varredura Acústica Sonar -->
+  <path d="M 64 22 A 42 42 0 0 1 106 64" fill="none" stroke="url(#sonarCyanGrad)" stroke-width="2.5" stroke-linecap="round" filter="url(#glowFilter)"/>
+  <path d="M 64 106 A 42 42 0 0 1 22 64" fill="none" stroke="url(#sonarGlowGrad)" stroke-width="2.5" stroke-linecap="round" filter="url(#glowFilter)"/>
+
+  <!-- Anel Médio de Pulso com Nó de Eco -->
+  <circle cx="64" cy="64" r="32" stroke="rgba(244, 63, 94, 0.3)" stroke-width="1.2" stroke-dasharray="4 4"/>
+  <circle cx="64" cy="32" r="3" fill="#38bdf8" filter="url(#glowFilter)"/>
+  <circle cx="64" cy="96" r="3" fill="#f43f5e" filter="url(#glowFilter)"/>
+  <circle cx="32" cy="64" r="2.5" fill="#ec4899"/>
+  <circle cx="96" cy="64" r="2.5" fill="#06b6d4"/>
+
+  <!-- Equalizador Acústico / Ondas de Foley no Centro (5 barras simétricas) -->
+  <g filter="url(#softGlow)">
+    <!-- Barra 1 (Esquerda extrema) -->
+    <rect x="42" y="55" width="4.5" height="18" rx="2.25" fill="#06b6d4"/>
+    <!-- Barra 2 (Média esquerda) -->
+    <rect x="51" y="46" width="4.5" height="36" rx="2.25" fill="url(#sonarCyanGrad)"/>
+    <!-- Barra 3 (Centro / Pico de Áudio) -->
+    <rect x="60" y="38" width="5.5" height="52" rx="2.75" fill="url(#sonarGlowGrad)"/>
+    <!-- Barra 4 (Média direita) -->
+    <rect x="70" y="48" width="4.5" height="32" rx="2.25" fill="#f43f5e"/>
+    <!-- Barra 5 (Direita extrema) -->
+    <rect x="79" y="56" width="4.5" height="16" rx="2.25" fill="#ec4899"/>
+  </g>
+
+  <!-- Marcas de Enquadramento Cinematográfico (Metragem / 24fps film gate) -->
+  <path d="M 18 30 L 18 18 L 30 18" fill="none" stroke="rgba(255, 255, 255, 0.2)" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M 110 30 L 110 18 L 98 18" fill="none" stroke="rgba(255, 255, 255, 0.2)" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M 18 98 L 18 110 L 30 110" fill="none" stroke="rgba(255, 255, 255, 0.2)" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M 110 98 L 110 110 L 98 110" fill="none" stroke="rgba(255, 255, 255, 0.2)" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

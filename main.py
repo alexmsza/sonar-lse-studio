@@ -229,6 +229,24 @@ def rollback_version(job_id: str, req: RollbackRequest):
     return result
 
 
+@app.get("/api/jobs/{job_id}/compliance")
+def get_job_compliance(job_id: str):
+    """Retorna relatório detalhado de conformidade ABNT NBR 15290 / 16452."""
+    job = job_manager.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Trabalho não encontrado.")
+    return job.get("compliance", {})
+
+
+@app.post("/api/jobs/{job_id}/auto-fix-overlaps")
+def auto_fix_overlaps(job_id: str, fps: float = 24.0):
+    """Corrige automaticamente sobreposições temporais e colisões entre legendas consecutivas."""
+    result = job_manager.auto_fix_job_overlaps(job_id, fps=fps)
+    if not result:
+        raise HTTPException(status_code=404, detail="Trabalho não encontrado ou sem legendas.")
+    return result
+
+
 # Rotas de Mídia e Download
 @app.get("/api/media/{job_id}")
 def stream_media(job_id: str):

@@ -78,12 +78,33 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnDownloadSrt = document.getElementById("btnDownloadSrt");
   const btnDownloadVtt = document.getElementById("btnDownloadVtt");
   const btnDownloadScript = document.getElementById("btnDownloadScript");
+  const btnAuditCompliance = document.getElementById("btnAuditCompliance");
+  const btnAutoFixOverlaps = document.getElementById("btnAutoFixOverlaps");
+  const qaScoreBadge = document.getElementById("qaScoreBadge");
+  const chkSmartBacktrack = document.getElementById("chkSmartBacktrack");
 
   // Modal de Histórico de Versões
   const modalHistory = document.getElementById("modalHistory");
   const btnCloseHistory = document.getElementById("btnCloseHistory");
   const btnCloseHistoryFooter = document.getElementById("btnCloseHistoryFooter");
   const historyListContainer = document.getElementById("historyListContainer");
+
+  // Modal de Conformidade e QA ABNT
+  const modalCompliance = document.getElementById("modalCompliance");
+  const btnCloseCompliance = document.getElementById("btnCloseCompliance");
+  const btnCloseComplianceFooter = document.getElementById("btnCloseComplianceFooter");
+  const btnModalAutoFixOverlaps = document.getElementById("btnModalAutoFixOverlaps");
+  const modalQaStatusText = document.getElementById("modalQaStatusText");
+  const modalQaScoreDisplay = document.getElementById("modalQaScoreDisplay");
+  const modalQaTotal = document.getElementById("modalQaTotal");
+  const modalQaAvgCps = document.getElementById("modalQaAvgCps");
+  const modalQaOverlaps = document.getElementById("modalQaOverlaps");
+  const modalQaLongLines = document.getElementById("modalQaLongLines");
+  const modalQaIssuesList = document.getElementById("modalQaIssuesList");
+
+  let lastFocusedInput = null;
+  let activeUtterance = null;
+  let lastWasPaused = false;
 
   // Player Ativo Dinâmico (Vídeo ou Áudio)
   function getActivePlayer() {
@@ -356,11 +377,17 @@ document.addEventListener("DOMContentLoaded", () => {
       btnDownloadVtt.disabled = !isCompleted;
       btnDownloadScript.disabled = !isCompleted;
       btnHistory.disabled = !isCompleted;
+      btnAuditCompliance.disabled = !isCompleted;
 
       // Versionamento
       activeHistory = job.history || [];
       revBadge.innerText = job.current_revision_id || (activeHistory.length > 0 ? activeHistory[activeHistory.length - 1].revision_id : "v1");
       updateUndoRedoButtons();
+
+      // Auditoria ABNT
+      if (job.compliance) {
+        updateComplianceBadges(job.compliance);
+      }
 
       // Configuração de Player Híbrido (Vídeo vs Áudio)
       if (reloadMedia) {
@@ -448,19 +475,21 @@ document.addEventListener("DOMContentLoaded", () => {
     renderSubtitlesTable(activeEntries);
   });
 
-  // 7. Renderização da Tabela de Entradas
+  // 7. Renderização da Tabela de Entradas com Auditoria ABNT e TTS
   function renderSubtitlesTable(entries) {
     subtitlesTableBody.innerHTML = "";
     if (entries.length === 0) {
       subtitlesTableBody.innerHTML = `
         <tr>
-          <td colspan="5" style="text-align: center; color: var(--text-dim); padding: 2rem;">
+          <td colspan="6" style="text-align: center; color: var(--text-dim); padding: 2rem;">
             Aguardando análise da metragem acústica ou nenhum evento sonoro/AD gerado ainda.
           </td>
         </tr>
       `;
       return;
     }
+
+    let hasAnyOverlap = false;
 
     entries.forEach((entry, index) => {
       const tr = document.createElement("tr");
@@ -472,6 +501,31 @@ document.addEventListener("DOMContentLoaded", () => {
       const startTimeFormatted = timecodeMode === "smpte" ? secondsToSmpte(entry.start_seconds, activeFps) : entry.start;
       const endTimeFormatted = timecodeMode === "smpte" ? secondsToSmpte(entry.end_seconds, activeFps) : entry.end;
 
+      // Verificação em tempo real de sobreposições e CPS
+      const prevEntry = index > 0 ? entries[index - 1] : null;
+      const isOverlap = prevEntry && entry.start_seconds < prevEntry.end_seconds;
+      if (isOverlap) {
+        hasAnyOverlap = true;
+        tr.classList.add("row-overlap-warn");
+      }
+
+      const dur = entry.end_seconds - entry.start_seconds;
+      const cleanText = (entry.text || "").replace(/\[AD\]/gi, "").replace(/[\[\]\(\)\-]/g, "").trim();
+      const cps = dur > 0 ? (cleanText.length / dur).toFixed(1) : 0;
+
+      let qaBadgeHtml = "";
+      if (isOverlap) {
+        qaBadgeHtml = `<span class="qa-pill-err" title="Colisão com #${prevEntry.id || index}">Colisão</span>`;
+      } else if (cps > 18) {
+        qaBadgeHtml = `<span class="qa-pill-warn" title="Leitura acelerada: ${cps} CPS (>18)">${cps} CPS</span>`;
+      } else if (dur < 1.0) {
+        qaBadgeHtml = `<span class="qa-pill-warn" title="Duração curta: ${dur.toFixed(1)}s (<1s)">${dur.toFixed(1)}s</span>`;
+      } else {
+        qaBadgeHtml = `<span class="qa-pill-ok" title="Ritmo bom: ${cps} CPS">${cps} CPS</span>`;
+      }
+
+      const safeText = (entry.text || "").replace(/"/g, '&quot;');
+
       tr.innerHTML = `
         <td style="color: var(--text-dim); font-size: 0.8rem; font-family: var(--font-mono);">${entry.id || index + 1}</td>
         <td>
@@ -481,13 +535,19 @@ document.addEventListener("DOMContentLoaded", () => {
           <input type="text" class="time-input" value="${endTimeFormatted}" data-field="end" data-index="${index}">
         </td>
         <td>
-          <input type="text" class="text-input" value="${entry.text}" data-field="text" data-index="${index}">
+          <input type="text" class="text-input" value="${safeText}" data-field="text" data-index="${index}">
         </td>
         <td style="text-align: center;">
-          <button class="btn btn-secondary btn-sm btn-play-cue" style="padding: 2px 6px; font-size: 0.75rem;" title="Ouvir/assistir este trecho" data-start="${entry.start_seconds}">
+          ${qaBadgeHtml}
+        </td>
+        <td style="text-align: center; white-space: nowrap;">
+          <button class="btn btn-secondary btn-sm btn-play-cue" style="padding: 2px 5px; font-size: 0.72rem;" title="Ir para este trecho" data-start="${entry.start_seconds}">
             ▶ Ir
           </button>
-          <button class="btn btn-secondary btn-sm btn-del-cue" style="padding: 2px 6px; font-size: 0.75rem; color: var(--sonar-red);" title="Excluir bloco" data-index="${index}">
+          <button class="btn btn-secondary btn-sm btn-tts-speak" style="padding: 2px 5px; font-size: 0.72rem;" title="Ouvir locução guiada da audiodescrição (TTS)" data-index="${index}">
+            🗣️
+          </button>
+          <button class="btn btn-secondary btn-sm btn-del-cue" style="padding: 2px 5px; font-size: 0.72rem; color: var(--sonar-red);" title="Excluir bloco" data-index="${index}">
             ✕
           </button>
         </td>
@@ -495,7 +555,20 @@ document.addEventListener("DOMContentLoaded", () => {
       subtitlesTableBody.appendChild(tr);
     });
 
-    // Edição Inline com cálculo automático de segundos
+    if (hasAnyOverlap) {
+      btnAutoFixOverlaps.style.display = "inline-flex";
+    } else {
+      btnAutoFixOverlaps.style.display = "none";
+    }
+
+    // Rastreia foco para o Soundpad
+    subtitlesTableBody.querySelectorAll(".text-input").forEach((inp) => {
+      inp.addEventListener("focus", (e) => {
+        lastFocusedInput = e.target;
+      });
+    });
+
+    // Edição Inline com recálculo
     subtitlesTableBody.querySelectorAll("input").forEach((inp) => {
       inp.addEventListener("change", (e) => {
         const idx = parseInt(e.target.dataset.index);
@@ -529,6 +602,26 @@ document.addEventListener("DOMContentLoaded", () => {
           player.currentTime = startSec;
           player.play();
         }
+      });
+    });
+
+    // Botão TTS Locução Guiada
+    subtitlesTableBody.querySelectorAll(".btn-tts-speak").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        const idx = parseInt(e.currentTarget.dataset.index);
+        const entry = activeEntries[idx];
+        if (!entry) return;
+
+        const curBtn = e.currentTarget;
+        curBtn.classList.add("speaking");
+
+        const player = getActivePlayer();
+        player.currentTime = entry.start_seconds;
+        player.pause();
+
+        speakText(entry.text, () => {
+          curBtn.classList.remove("speaking");
+        });
       });
     });
 
@@ -873,6 +966,215 @@ document.addEventListener("DOMContentLoaded", () => {
   btnOpenHelp.addEventListener("click", () => modalHelp.classList.add("open"));
   btnCloseHelp.addEventListener("click", () => modalHelp.classList.remove("open"));
   btnHelpCloseOk.addEventListener("click", () => modalHelp.classList.remove("open"));
+
+  // 15. Síntese de Voz Nativa para Locução Guiada (TTS Preview)
+  function speakText(text, onEnd) {
+    if (!window.speechSynthesis) {
+      alert("Seu navegador não suporta a Web Speech API.");
+      if (onEnd) onEnd();
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const cleanText = (text || "")
+      .replace(/\[AD\]/gi, "")
+      .replace(/[\[\]]/g, "")
+      .trim();
+
+    if (!cleanText) {
+      if (onEnd) onEnd();
+      return;
+    }
+
+    activeUtterance = new SpeechSynthesisUtterance(cleanText);
+    activeUtterance.lang = "pt-BR";
+    activeUtterance.rate = 1.05; // Cadência profissional de locução de audiodescrição
+    activeUtterance.pitch = 1.0;
+
+    activeUtterance.onend = () => {
+      if (onEnd) onEnd();
+    };
+    activeUtterance.onerror = () => {
+      if (onEnd) onEnd();
+    };
+
+    window.speechSynthesis.speak(activeUtterance);
+  }
+
+  // 16. Soundpad de Inserção Rápida de Foley / AD
+  document.querySelectorAll(".soundpad-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const tag = chip.dataset.tag;
+      if (lastFocusedInput) {
+        const val = lastFocusedInput.value;
+        const startPos = lastFocusedInput.selectionStart || val.length;
+        const endPos = lastFocusedInput.selectionEnd || val.length;
+        const spaceBefore = startPos > 0 && !val[startPos - 1].endsWith(" ") ? " " : "";
+        const spaceAfter = tag.endsWith(" ") ? "" : " ";
+        const newVal = val.substring(0, startPos) + spaceBefore + tag + spaceAfter + val.substring(endPos);
+        lastFocusedInput.value = newVal;
+        lastFocusedInput.focus();
+        lastFocusedInput.dispatchEvent(new Event("change"));
+      } else if (activeEntries.length > 0) {
+        const lastInput = subtitlesTableBody.querySelector("tr:last-child .text-input");
+        if (lastInput) {
+          lastInput.value = (lastInput.value + " " + tag).trim();
+          lastInput.dispatchEvent(new Event("change"));
+        }
+      }
+    });
+  });
+
+  // 17. Pedal de Transcrição Inteligente (Smart Backtrack)
+  function setupSmartBacktrack(player) {
+    player.addEventListener("pause", () => {
+      lastWasPaused = true;
+    });
+    player.addEventListener("play", () => {
+      if (lastWasPaused && chkSmartBacktrack && chkSmartBacktrack.checked) {
+        player.currentTime = Math.max(0, player.currentTime - 1.2);
+      }
+      lastWasPaused = false;
+    });
+  }
+  setupSmartBacktrack(videoPlayer);
+  setupSmartBacktrack(audioPlayer);
+
+  // 18. Gestão e Auditoria de Conformidade ABNT
+  function updateComplianceBadges(compliance) {
+    if (!compliance) return;
+    const score = compliance.score !== undefined ? compliance.score : 100;
+    qaScoreBadge.innerText = `${score}%`;
+
+    if (score >= 90) {
+      qaScoreBadge.style.background = "rgba(16, 185, 129, 0.2)";
+      qaScoreBadge.style.color = "#10b981";
+    } else if (score >= 70) {
+      qaScoreBadge.style.background = "rgba(245, 158, 11, 0.2)";
+      qaScoreBadge.style.color = "var(--sonar-amber)";
+    } else {
+      qaScoreBadge.style.background = "rgba(239, 68, 68, 0.2)";
+      qaScoreBadge.style.color = "#ef4444";
+    }
+
+    const overlaps = compliance.stats ? compliance.stats.overlaps_count : 0;
+    if (overlaps > 0) {
+      btnAutoFixOverlaps.style.display = "inline-flex";
+    } else {
+      btnAutoFixOverlaps.style.display = "none";
+    }
+  }
+
+  btnAuditCompliance.addEventListener("click", async () => {
+    if (!activeJobId) return;
+    try {
+      const res = await fetch(`/api/jobs/${activeJobId}/compliance`);
+      const comp = await res.json();
+      renderComplianceModal(comp);
+      modalCompliance.classList.add("open");
+    } catch (e) {
+      console.error("Erro ao auditar conformidade:", e);
+    }
+  });
+
+  btnCloseCompliance.addEventListener("click", () => modalCompliance.classList.remove("open"));
+  btnCloseComplianceFooter.addEventListener("click", () => modalCompliance.classList.remove("open"));
+
+  function renderComplianceModal(comp) {
+    const score = comp.score !== undefined ? comp.score : 100;
+    modalQaScoreDisplay.innerText = `${score}%`;
+    modalQaScoreDisplay.style.color = score >= 90 ? "#10b981" : score >= 70 ? "var(--sonar-amber)" : "#ef4444";
+    modalQaStatusText.innerText =
+      score >= 95
+        ? "Excelente (Em estrita conformidade com a ABNT)"
+        : score >= 80
+        ? "Boa Conformidade (Pequenos ajustes recomendados)"
+        : "Atenção: Correções de tempo ou texto necessárias";
+    modalQaStatusText.style.color = modalQaScoreDisplay.style.color;
+
+    const stats = comp.stats || {};
+    modalQaTotal.innerText = stats.total_entries || 0;
+    modalQaAvgCps.innerText = `${stats.avg_cps || 0} CPS`;
+    modalQaOverlaps.innerText = stats.overlaps_count || 0;
+    modalQaOverlaps.style.color = stats.overlaps_count > 0 ? "#ef4444" : "#10b981";
+    modalQaLongLines.innerText = stats.long_lines_count || 0;
+    modalQaLongLines.style.color = stats.long_lines_count > 0 ? "var(--sonar-amber)" : "#10b981";
+
+    modalQaIssuesList.innerHTML = "";
+    const allIssues = [...(comp.errors || []), ...(comp.warnings || [])];
+    if (allIssues.length === 0) {
+      modalQaIssuesList.innerHTML = `
+        <div style="padding: 1.2rem; text-align: center; color: #10b981; font-weight: 600; background: rgba(16, 185, 129, 0.05); border-radius: var(--radius-sm);">
+          ✓ Nenhuma inconformidade detectada! O arquivo atende plenamente aos requisitos de projeção de festivais e televisão.
+        </div>
+      `;
+    } else {
+      allIssues.forEach((issue) => {
+        const item = document.createElement("div");
+        item.style.padding = "0.5rem 0.75rem";
+        item.style.borderRadius = "var(--radius-sm)";
+        item.style.fontSize = "0.82rem";
+        item.style.display = "flex";
+        item.style.justifyContent = "space-between";
+        item.style.alignItems = "center";
+        item.style.border = "1px solid var(--border-color)";
+
+        if (issue.type === "error") {
+          item.style.background = "rgba(239, 68, 68, 0.1)";
+          item.style.color = "#fca5a5";
+        } else {
+          item.style.background = "rgba(245, 158, 11, 0.1)";
+          item.style.color = "#fcd34d";
+        }
+
+        item.innerHTML = `
+          <span><strong>#${issue.entry_id}:</strong> ${issue.message}</span>
+          <button class="btn btn-secondary btn-sm btn-jump-entry" style="padding: 2px 6px; font-size: 0.72rem;" data-id="${issue.entry_id}">
+            Ver &rarr;
+          </button>
+        `;
+        modalQaIssuesList.appendChild(item);
+      });
+
+      modalQaIssuesList.querySelectorAll(".btn-jump-entry").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          const id = e.currentTarget.dataset.id;
+          modalCompliance.classList.remove("open");
+          const row = subtitlesTableBody.querySelector(`.sub-row:nth-child(${id})`);
+          if (row) {
+            row.scrollIntoView({ behavior: "smooth", block: "center" });
+            const inp = row.querySelector(".text-input");
+            if (inp) inp.focus();
+          }
+        });
+      });
+    }
+  }
+
+  async function executeAutoFixOverlaps() {
+    if (!activeJobId) return;
+    try {
+      btnAutoFixOverlaps.innerText = "Corrigindo...";
+      const res = await fetch(`/api/jobs/${activeJobId}/auto-fix-overlaps?fps=${activeFps}`, { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        activeEntries = data.entries;
+        renderSubtitlesTable(activeEntries);
+        updateComplianceBadges(data.compliance);
+        if (modalCompliance.classList.contains("open")) {
+          renderComplianceModal(data.compliance);
+        }
+        btnSaveEdits.innerText = "✓ Versão Salva!";
+        btnSaveEdits.classList.remove("btn-cyan");
+        btnAutoFixOverlaps.innerText = "⚡ Corrigir Sobreposições";
+      }
+    } catch (e) {
+      alert("Erro ao aplicar correção de sobreposições: " + e.message);
+      btnAutoFixOverlaps.innerText = "⚡ Corrigir Sobreposições";
+    }
+  }
+
+  btnAutoFixOverlaps.addEventListener("click", executeAutoFixOverlaps);
+  btnModalAutoFixOverlaps.addEventListener("click", executeAutoFixOverlaps);
 
   // Inicia checagem inicial
   fetchJobs();
