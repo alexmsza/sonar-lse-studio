@@ -1,0 +1,22 @@
+# Ambientes e caches Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Arquivos de credenciais e segredos
+.env
+*.env.local
+
+# Pastas de mídia processadas
+uploads/*
+!uploads/.gitkeep
+outputs/*
+!outputs/.gitkeep
+
+# IDE e sistema
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SONAR | Estúdio de Legendagem Descritiva (LSE & Foley)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="header-container">
+      <div class="brand-wrapper">
+        <div class="brand-icon">
+          <!-- Ícone Sonar Ondas Acústicas -->
+          <svg viewBox="0 0 24 24">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v10h-2zm-4 3h2v4H7zm8 0h2v4h-2z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-title">
+            SONAR <span class="brand-badge">LSE Studio</span>
+          </div>
+          <div class="brand-sub">Legendagem Descritiva de Foley, Sonoplastia e Ruídos para Festivais</div>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <div id="apiStatusBadge" class="status-badge">
+          <div id="apiStatusDot" class="status-dot disconnected"></div>
+          <span id="apiStatusText">Verificando API...</span>
+        </div>
+        <button id="btnOpenConfig" class="btn btn-secondary">
+          ⚙️ Configurar API
+        </button>
+        <button id="btnOpenHelp" class="btn btn-secondary btn-sm">
+          💡 Como Funciona
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Container Principal -->
+  <main class="app-container">
+    
+    <!-- Coluna Esquerda: Upload, Parâmetros e Fila -->
+    <aside class="sidebar">
+      
+      <!-- Painel de Upload -->
+      <section class="glass-panel">
+        <div class="panel-header">
+          <h2 class="panel-title">
+            <span>🎬</span> Importar Filmes / Áudios
+          </h2>
+          <span class="badge" style="font-size: 0.75rem; color: var(--text-dim);">Animage Lote</span>
+        </div>
+        
+        <div class="panel-body">
+          <!-- Dropzone -->
+          <div id="dropzone" class="dropzone">
+            <input type="file" id="fileInput" multiple accept="video/*,audio/*,.ogg,.mp4,.mov,.mkv,.mp3,.wav,.m4a" style="display: none;">
+            <div class="dropzone-icon">📥</div>
+            <div class="dropzone-title">Arraste seus curtas ou áudios aqui</div>
+            <div class="dropzone-sub">Suporta MP4, MOV, MKV, OGG, MP3, WAV (múltiplos arquivos)</div>
+          </div>
+
+          <div id="selectedFilesSummary" style="margin-top: 0.8rem; font-size: 0.82rem; color: var(--sonar-cyan); display: none;"></div>
+
+          <!-- Parâmetros de Processamento -->
+          <div class="form-group">
+            <label class="form-label" for="selectMode">Modo de Análise Acústica:</label>
+            <select id="selectMode" class="form-select">
+              <option value="foley_only" selected>🔊 Sonoplastia & Foley Puro (Sem Diálogos - Padrão Animage)</option>
+              <option value="full_sdh">🗣️ LSE Completo (Falas + Sonoplastia + Ruídos)</option>
+              <option value="music_ambience">🎵 Trilha Musical & Ambiência Acústica</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="selectDetail">Sensibilidade da Detecção:</label>
+            <select id="selectDetail" class="form-select">
+              <option value="high" selected>Alta Sensibilidade (Captura cliques, passos, respiração e portas)</option>
+              <option value="medium">Equilibrado (Foco nos eventos principais e música)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="selectLang">Norma / Idioma da Legenda:</label>
+            <select id="selectLang" class="form-select">
+              <option value="pt-br" selected>Português do Brasil (ABNT NBR 15290)</option>
+              <option value="en-us">Inglês (SDH International Guidelines)</option>
+            </select>
+          </div>
+
+          <button id="btnStartProcess" class="btn btn-primary" style="width: 100%; margin-top: 1.2rem; justify-content: center;">
+            ⚡ Iniciar Processamento Inteligente
+          </button>
+        </div>
+      </section>
+
+      <!-- Fila de Processamento em Lote -->
+      <section class="glass-panel">
+        <div class="panel-header">
+          <h2 class="panel-title">
+            <span>📋</span> Fila de Produção
+          </h2>
+          <button id="btnDownloadAllZip" class="btn btn-secondary btn-sm" title="Baixar todas as legendas em formato ZIP">
+            📦 Baixar Tudo (.ZIP)
+          </button>
+        </div>
+
+        <div class="panel-body">
+          <div id="queueList" class="queue-list">
+            <div class="empty-state" style="padding: 2rem 1rem;">
+              <div style="font-size: 1.8rem; margin-bottom: 0.5rem; opacity: 0.4;">⏳</div>
+              <p style="font-size: 0.85rem;">Nenhum arquivo na fila.<br>Importe seus filmes acima para começar.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </aside>
+
+    <!-- Coluna Direita: Estúdio de Inspeção e Editor de Legenda -->
+    <section class="glass-panel studio-main">
+      <div class="panel-header">
+        <h2 class="panel-title">
+          <span>🎚️</span> Estúdio de Revisão & Sincronização LSE
+        </h2>
+        <div id="activeJobActions" style="display: flex; gap: 0.5rem;">
+          <button id="btnSaveEdits" class="btn btn-secondary btn-sm" disabled>
+            💾 Salvar Edição
+          </button>
+          <button id="btnDownloadSrt" class="btn btn-primary btn-sm" disabled>
+            📥 Baixar .SRT
+          </button>
+          <button id="btnDownloadVtt" class="btn btn-secondary btn-sm" disabled>
+            📄 Baixar .VTT
+          </button>
+        </div>
+      </div>
+
+      <div class="panel-body">
+        
+        <!-- Estado Vazio (Nenhum trabalho selecionado) -->
+        <div id="studioEmptyState" class="empty-state">
+          <div class="empty-state-icon">🎧</div>
+          <h3>Nenhum Filme Selecionado</h3>
+          <p style="max-width: 450px; margin: 0.5rem auto 0; font-size: 0.9rem;">
+            Selecione um curta-metragem na fila de produção à esquerda para reproduzir o áudio, inspecionar a sonoplastia e editar os blocos de legenda em tempo real.
+          </p>
+        </div>
+
+        <!-- Conteúdo do Estúdio Ativo -->
+        <div id="studioActiveContent" style="display: none; flex-direction: column; gap: 1.2rem;">
+          
+          <!-- Metadados do Filme Ativo -->
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.8rem;">
+            <div>
+              <h3 id="activeMovieTitle" style="font-size: 1.15rem; font-weight: 700; color: var(--text-main);">Nome do Arquivo</h3>
+              <div id="activeMovieMeta" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">Duração: 00:00 | Modo: Sonoplastia Puro</div>
+            </div>
+            <div id="activeMovieStatusBadge" class="status-badge">
+              <span id="activeMovieStatusText">Processando...</span>
+            </div>
+          </div>
+
+          <!-- Player de Áudio/Vídeo Integrado -->
+          <div class="audio-player-card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 0.82rem; font-weight: 600; color: var(--text-muted);">Monitor Acústico da Sonar (Sincronizado)</span>
+              <div style="font-size: 0.78rem; color: var(--sonar-amber); font-family: var(--font-mono);">
+                Atalhos: [Espaço] Play/Pause | [J] -2s | [L] +2s
+              </div>
+            </div>
+            <audio id="audioPlayer" class="native-audio" controls preload="metadata"></audio>
+          </div>
+
+          <!-- Tabela de Legendas SRT -->
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="font-size: 0.9rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
+              <span>📝</span> Blocos de Legenda LSE Detectados (<span id="subCount">0</span>)
+            </div>
+            <button id="btnAddSubtitle" class="btn btn-secondary btn-sm">
+              ➕ Novo Bloco
+            </button>
+          </div>
+
+          <div class="subtitles-container">
+            <table class="sub-table">
+              <thead>
+                <tr>
+                  <th style="width: 50px;">#</th>
+                  <th style="width: 125px;">Início</th>
+                  <th style="width: 125px;">Fim</th>
+                  <th>Descrição do Ruído / Foley / Sonoplastia</th>
+                  <th style="width: 120px; text-align: center;">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="subtitlesTableBody">
+                <!-- Inserido dinamicamente via JS -->
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal de Configuração de API -->
+  <div id="modalConfig" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title">⚙️ Credenciais da API (Sonar LSE)</h3>
+        <button class="modal-close" id="btnCloseConfig">&times;</button>
+      </div>
+      
+      <div class="modal-body">
+        <div class="info-callout">
+          <div class="info-callout-icon">💡</div>
+          <div>
+            <strong>Por que a Google Gemini API é necessária?</strong><br>
+            Ferramentas convencionais (como Whisper) são treinadas apenas para transcrever fala humana e ficam cegas para ruídos. O Gemini possui inteligência acústica multimodal nativa que escuta o espectrograma completo, identificando portas rangendo, passos, foley e instrumentos musicais.
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 0;">
+          <label class="form-label" for="inputApiKey">Chave da Google Gemini API (API Key):</label>
+          <input type="password" id="inputApiKey" class="form-input" placeholder="Cole sua chave aqui (AIzaSy...)">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.4rem;">
+            <span style="font-size: 0.75rem; color: var(--text-dim);">A chave é mantida apenas no seu arquivo .env local com sigilo total.</span>
+            <a href="https://aistudio.google.com/app/apikey" target="_blank" style="font-size: 0.78rem; color: var(--sonar-amber); text-decoration: none; font-weight: 600;">
+              🔑 Obter Chave Grátis no Google AI Studio &rarr;
+            </a>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="selectModel">Modelo Acústico do Gemini:</label>
+          <select id="selectModel" class="form-select">
+            <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (Recomendado - Ultra rápido e preciso)</option>
+            <option value="gemini-1.5-flash">Gemini 1.5 Flash (Ampla compatibilidade)</option>
+            <option value="gemini-3.8-flash">Gemini 3.8 Flash (Nova geração)</option>
+          </select>
+        </div>
+
+        <div id="testFeedback" style="display: none; padding: 0.75rem; border-radius: var(--radius-sm); font-size: 0.85rem;"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="btnTestApi" class="btn btn-secondary">
+          🧪 Testar Conexão
+        </button>
+        <button id="btnSaveConfig" class="btn btn-primary">
+          💾 Salvar Configurações
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Ajuda / Como Funciona -->
+  <div id="modalHelp" class="modal-overlay">
+    <div class="modal-box" style="max-width: 680px;">
+      <div class="modal-header">
+        <h3 class="modal-title">📖 Guia Operacional — Sonar no Animage</h3>
+        <button class="modal-close" id="btnCloseHelp">&times;</button>
+      </div>
+      
+      <div class="modal-body" style="font-size: 0.9rem; line-height: 1.6; max-height: 500px; overflow-y: auto;">
+        <h4 style="color: var(--sonar-amber); margin-bottom: 0.4rem;">1. O Desafio dos Curtas de Animação sem Falas</h4>
+        <p style="color: var(--text-muted); margin-bottom: 1rem;">
+          No Festival Animage, a maioria das obras foca em expressão visual e sonoplastia pura. Modelos de transcrição tradicionais (Whisper, CapCut, Premiere) falham porque buscam apenas fonemas falados. O Sonar LSE Studio utiliza análise multimodal acústica para captar nuances de foley, silêncio e música.
+        </p>
+
+        <h4 style="color: var(--sonar-cyan); margin-bottom: 0.4rem;">2. Padrão ABNT NBR 15290</h4>
+        <p style="color: var(--text-muted); margin-bottom: 1rem;">
+          Todas as descrições de ruídos devem aparecer entre colchetes <code>[...]</code> (ex: <code>[Porta rangendo ao fundo]</code>, <code>[Música alegre com ritmo acelerado]</code>). Cada legenda deve ter duração mínima de 1.2 segundos para garantir legibilidade pelo público surdo e ensurdecido.
+        </p>
+
+        <h4 style="color: var(--sonar-emerald); margin-bottom: 0.4rem;">3. Fluxo de Entrega Rápida (Prazo de 7 Dias)</h4>
+        <ol style="color: var(--text-muted); padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.4rem;">
+          <li>Cadastre sua chave da API do Google Gemini (gratuita e ilimitada no plano inicial).</li>
+          <li>Arraste todos os curtas do festival de uma vez para a fila.</li>
+          <li>Aguarde o processamento assíncrono (menos de 30 segundos por curta).</li>
+          <li>Revise e ajuste qualquer termo no player sincronizado.</li>
+          <li>Clique em <strong>"Baixar Tudo (.ZIP)"</strong> para obter todos os arquivos .SRT padronizados prontos para entrega ao festival.</li>
+        </ol>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btnHelpCloseOk">Entendi</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
