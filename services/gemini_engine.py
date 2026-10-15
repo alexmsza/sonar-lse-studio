@@ -87,9 +87,35 @@ DIRETRIZES:
 3. Retorne EXCLUSIVAMENTE o bloco SRT.
 """
 
+SYSTEM_PROMPT_AUDIODESCRICAO = """Você é um Audiodescritor Sênior e Roteirista de Acessibilidade Audiovisual da produtora Sonar, credenciado para Festivais de Cinema e Animação (ABNT NBR 16452).
+
+Sua missão é criar o ROTEIRO DE AUDIODESCRIÇÃO (AD) com metragens exatas no formato SRT para o filme/curta analisado.
+
+A Audiodescrição traduz o visual em verbal para pessoas cegas ou com baixa visão:
+1. Descreva de forma concisa, objetiva e visualmente evocativa as AÇÕES PRINCIPAIS, PERSONAGENS (aparência, expressões faciais, movimentos, gestos), CENÁRIOS, OBJETOS RELEVANTES, LETREIROS e MUDANÇAS DE CENA.
+2. Cada bloco de audiodescrição DEVE começar com a tag `[AD] `.
+   Exemplos reais:
+   1
+   00:00:01,000 --> 00:00:04,500
+   [AD] Título na tela em letras amarelas estilizadas. Um pássaro azul pousa em um galho seco.
+
+   2
+   00:00:05,200 --> 00:00:08,800
+   [AD] O menino olha espantado ao redor e abre lentamente uma porta enferrujada.
+
+   3
+   00:00:10,000 --> 00:00:13,400
+   [AD] Em plano geral, uma tempestade de areia se aproxima no horizonte.
+
+3. TEMPO E RITMO DE LOCUÇÃO:
+   - As descrições devem ser inseridas nos momentos adequados (pausas de diálogos ou sobre sons secundários).
+   - O texto deve ter tamanho proporcional ao tempo de tela (em média 3 a 4 palavras por segundo para leitura fluida do locutor).
+4. Retorne EXCLUSIVAMENTE o arquivo SRT válido, sem introduções ou observações fora do padrão SRT.
+"""
+
 
 class GeminiLSEEngine:
-    """Motor de análise acústica e geração de legendas LSE da Sonar."""
+    """Motor de análise acústica e geração de legendas LSE e Audiodescrição da Sonar."""
 
     def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash"):
         self.api_key = api_key.strip()
@@ -104,14 +130,16 @@ class GeminiLSEEngine:
         language: str = "pt-br"
     ) -> Dict[str, Any]:
         """
-        Envia o áudio para o Google Gemini e gera as legendas descritivas.
+        Envia o áudio para o Google Gemini e gera as legendas descritivas ou roteiro de audiodescrição.
         Retorna dicionário com o SRT limpo, lista de entradas e metadados.
         """
         if not audio_path.exists():
             raise FileNotFoundError(f"Arquivo de áudio não encontrado: {audio_path}")
 
         # Seleciona o system prompt adequado
-        if mode == "full_sdh":
+        if mode == "audiodescricao":
+            system_prompt = SYSTEM_PROMPT_AUDIODESCRICAO
+        elif mode == "full_sdh":
             system_prompt = SYSTEM_PROMPT_FULL_SDH
         elif mode == "music_ambience":
             system_prompt = SYSTEM_PROMPT_MUSIC_AMBIENCE

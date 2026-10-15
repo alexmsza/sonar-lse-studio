@@ -54,8 +54,22 @@ class ConfigRequest(BaseModel):
     gemini_model: Optional[str] = "gemini-2.5-flash"
 
 
+class IngestUrlRequest(BaseModel):
+    url: str
+    mode: Optional[str] = "foley_only"
+    detail_level: Optional[str] = "high"
+    language: Optional[str] = "pt-br"
+    custom_api_key: Optional[str] = None
+    custom_model: Optional[str] = None
+
+
 class UpdateEntriesRequest(BaseModel):
     entries: List[dict]
+    description: Optional[str] = "Edição manual no estúdio"
+
+
+class RollbackRequest(BaseModel):
+    revision_id: str
 
 
 # Rotas de Configuração
@@ -93,7 +107,7 @@ def test_config(req: ConfigRequest):
     return result
 
 
-# Rotas de Upload e Processamento
+# Rotas de Ingestão e Processamento
 @app.post("/api/upload")
 async def upload_files(
     files: List[UploadFile] = File(...),
@@ -114,11 +128,11 @@ async def upload_files(
         )
 
     job_ids = []
+    import time
     for upload in files:
         safe_filename = upload.filename.replace(" ", "_")
         dest_path = UPLOAD_DIR / f"{safe_filename}"
 
-        # Se já existir arquivo com mesmo nome, prefixa com timestamp
         if dest_path.exists():
             dest_path = UPLOAD_DIR / f"{int(time.time())}_{safe_filename}"
 
@@ -143,9 +157,41 @@ async def upload_files(
     }
 
 
+@app.post("/api/ingest-url")
+def ingest_url(req: IngestUrlRequest):
+    """
+    Recebe um link de streaming/vídeo da web (YouTube, Vimeo, MP4 direto),
+    baixa o stream via yt-dlp e enfileira na esteira da Sonar.
+    """
+    api_key_to_use = req.custom_api_key or get_gemini_api_key()
+    if not api_key_to_use:
+        raise HTTPException(
+            status_code=400,
+            detail="Chave de API do Google Gemini não configurada. Por favor acesse as Configurações e cadastre sua chave."
+        )
+
+    if not req.url or not req.url.strip().startswith("http"):
+        raise HTTPException(status_code=400, detail="Por favor informe uma URL válida iniciando com http:// ou https://")
+
+    job_id = job_manager.create_job_from_url(
+        url=req.url.strip(),
+        mode=req.mode or "foley_only",
+        detail_level=req.detail_level or "high",
+        language=req.language or "pt-br",
+        custom_api_key=api_key_to_use,
+        custom_model=req.custom_model
+    )
+
+    return {
+        "success": True,
+        "message": "Stream de vídeo recebido! Baixando e iniciando processamento acústico...",
+        "job_id": job_id
+    }
+
+
 @app.get("/api/jobs")
 def list_jobs():
-    """Retorna todos os trabalhos de legendagem."""
+    """Retorna todos os trabalhos de legendagem e audiodescrição."""
     return {"jobs": job_manager.list_jobs()}
 
 
@@ -160,24 +206,45 @@ def get_job_detail(job_id: str):
 
 @app.put("/api/jobs/{job_id}/entries")
 def update_entries(job_id: str, req: UpdateEntriesRequest):
-    """Atualiza as legendas de um trabalho após edição do usuário."""
-    success = job_manager.update_job_entries(job_id, req.entries)
+    """Atualiza as legendas de um trabalho após edição do usuário, gerando uma nova revisão imutável."""
+    success = job_manager.update_job_entries(job_id, req.entries, description=req.description or "Edição manual")
     if not success:
         raise HTTPException(status_code=404, detail="Trabalho não encontrado ou erro ao atualizar.")
-    return {"success": True, "message": "Legendas atualizadas com sucesso!"}
+    return {"success": True, "message": "Legendas atualizadas com snapshot versionado!"}
+
+
+@app.get("/api/jobs/{job_id}/history")
+def get_history(job_id: str):
+    """Retorna todo o histórico de versões e snapshots deste trabalho (Undo/Redo)."""
+    history = job_manager.get_job_history(job_id)
+    return {"job_id": job_id, "history": history}
+
+
+@app.post("/api/jobs/{job_id}/rollback")
+def rollback_version(job_id: str, req: RollbackRequest):
+    """Restaura as legendas para um snapshot anterior do histórico."""
+    result = job_manager.rollback_job_version(job_id, req.revision_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Trabalho ou versão de snapshot não encontrada.")
+    return result
 
 
 # Rotas de Mídia e Download
 @app.get("/api/media/{job_id}")
 def stream_media(job_id: str):
-    """Disponibiliza o fluxo de áudio para o player nativo do navegador."""
+    """
+    Disponibiliza o fluxo de vídeo ou áudio nativo para o player do estúdio.
+    Se for vídeo, transmite o vídeo original para exibição sincronizada.
+    """
     job = job_manager.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Trabalho não encontrado.")
 
-    # Se o áudio já foi extraído, usa o áudio extraído (mais leve para streaming)
     media_path = None
-    if job.get("audio_path") and Path(job["audio_path"]).exists():
+    # Se o arquivo for vídeo, preferimos o vídeo para o player do estúdio
+    if job.get("is_video") and job.get("original_path") and Path(job["original_path"]).exists():
+        media_path = Path(job["original_path"])
+    elif job.get("audio_path") and Path(job["audio_path"]).exists():
         media_path = Path(job["audio_path"])
     elif job.get("original_path") and Path(job["original_path"]).exists():
         media_path = Path(job["original_path"])
@@ -186,7 +253,18 @@ def stream_media(job_id: str):
         raise HTTPException(status_code=404, detail="Arquivo de mídia não encontrado em disco.")
 
     suffix = media_path.suffix.lower()
-    media_type = "audio/mpeg" if suffix == ".mp3" else ("audio/ogg" if suffix == ".ogg" else "video/mp4")
+    if suffix in {".mp4", ".m4v"}:
+        media_type = "video/mp4"
+    elif suffix in {".webm"}:
+        media_type = "video/webm"
+    elif suffix in {".ogg", ".ogv"}:
+        media_type = "video/ogg"
+    elif suffix in {".mp3"}:
+        media_type = "audio/mpeg"
+    elif suffix in {".wav"}:
+        media_type = "audio/wav"
+    else:
+        media_type = "application/octet-stream"
 
     return FileResponse(path=str(media_path), media_type=media_type, filename=media_path.name)
 
@@ -199,13 +277,13 @@ def download_srt(job_id: str):
         raise HTTPException(status_code=404, detail="Legenda não disponível para este trabalho.")
 
     filename_base = Path(job["filename"]).stem
-    srt_filename = f"{filename_base}_LSE_Sonar.srt"
+    tag = "AD" if job.get("mode") == "audiodescricao" else "LSE"
+    srt_filename = f"{filename_base}_{tag}_Sonar.srt"
     srt_path = OUTPUT_DIR / f"{Path(job['filename']).stem}.srt"
 
     if srt_path.exists():
         return FileResponse(path=str(srt_path), filename=srt_filename, media_type="text/plain; charset=utf-8")
 
-    # Retorna dinâmico se arquivo não estiver em disco
     return StreamingResponse(
         iter([job["srt_content"].encode("utf-8")]),
         media_type="text/plain; charset=utf-8",
@@ -221,7 +299,8 @@ def download_vtt(job_id: str):
         raise HTTPException(status_code=404, detail="Legenda VTT não disponível.")
 
     filename_base = Path(job["filename"]).stem
-    vtt_filename = f"{filename_base}_LSE_Sonar.vtt"
+    tag = "AD" if job.get("mode") == "audiodescricao" else "LSE"
+    vtt_filename = f"{filename_base}_{tag}_Sonar.vtt"
 
     return StreamingResponse(
         iter([job["vtt_content"].encode("utf-8")]),
@@ -230,16 +309,38 @@ def download_vtt(job_id: str):
     )
 
 
+@app.get("/api/jobs/{job_id}/download-script")
+def download_script(job_id: str, fps: float = 24.0):
+    """
+    Exporta o Roteiro Técnico de Metragem Audiovisual com SMPTE Timecode
+    formatado para festivais de cinema, animações e televisão.
+    """
+    script_text = job_manager.get_technical_script(job_id, fps=fps)
+    if not script_text:
+        raise HTTPException(status_code=404, detail="Roteiro técnico não disponível.")
+
+    job = job_manager.get_job(job_id)
+    filename_base = Path(job["filename"]).stem if job else "obra"
+    tag = "AD" if job and job.get("mode") == "audiodescricao" else "LSE"
+    script_filename = f"{filename_base}_{tag}_Roteiro_SMPTE_{int(fps)}fps.txt"
+
+    return StreamingResponse(
+        iter([script_text.encode("utf-8")]),
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{script_filename}"'}
+    )
+
+
 @app.get("/api/download-all-zip")
 def download_all_zip():
-    """Gera e baixa um arquivo ZIP com todas as legendas concluídas da fila."""
+    """Gera e baixa um arquivo ZIP com todas as legendas e roteiros concluídos da fila."""
     zip_path = job_manager.create_batch_zip()
     if not zip_path or not zip_path.exists():
         raise HTTPException(status_code=400, detail="Nenhuma legenda concluída disponível para empacotar em lote.")
 
     return FileResponse(
         path=str(zip_path),
-        filename="Sonar_Legendas_LSE_Lote.zip",
+        filename="Sonar_Acessibilidade_Animage_Lote.zip",
         media_type="application/zip"
     )
 

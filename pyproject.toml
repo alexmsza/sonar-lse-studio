@@ -11,4 +11,5 @@ dependencies = [
     "python-multipart>=0.0.32",
     "requests>=2.34.2",
     "uvicorn[standard]>=0.54.0",
+    "yt-dlp>=2026.8.19",
 ]

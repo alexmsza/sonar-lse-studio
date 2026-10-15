@@ -60,28 +60,51 @@
         </div>
         
         <div class="panel-body">
-          <!-- Dropzone -->
-          <div id="dropzone" class="dropzone">
-            <input type="file" id="fileInput" multiple accept="video/*,audio/*,.ogg,.mp4,.mov,.mkv,.mp3,.wav,.m4a" style="display: none;">
-            <div class="dropzone-icon">📥</div>
-            <div class="dropzone-title">Arraste seus curtas ou áudios aqui</div>
-            <div class="dropzone-sub">Suporta MP4, MOV, MKV, OGG, MP3, WAV (múltiplos arquivos)</div>
+          <!-- Abas de Importação -->
+          <div class="import-tabs">
+            <button id="tabFiles" class="tab-btn active" type="button">
+              📁 Arquivo Local
+            </button>
+            <button id="tabUrl" class="tab-btn" type="button">
+              🔗 Link Streaming (Web/YouTube)
+            </button>
           </div>
 
-          <div id="selectedFilesSummary" style="margin-top: 0.8rem; font-size: 0.82rem; color: var(--sonar-cyan); display: none;"></div>
+          <!-- Aba 1: Dropzone de Arquivos -->
+          <div id="panelTabFiles">
+            <div id="dropzone" class="dropzone">
+              <input type="file" id="fileInput" multiple accept="video/*,audio/*,.ogg,.mp4,.mov,.mkv,.mp3,.wav,.m4a" style="display: none;">
+              <div class="dropzone-icon">📥</div>
+              <div class="dropzone-title">Arraste seus curtas ou áudios aqui</div>
+              <div class="dropzone-sub">Suporta MP4, MOV, MKV, OGG, MP3, WAV (múltiplos arquivos)</div>
+            </div>
+            <div id="selectedFilesSummary" style="margin-top: 0.8rem; font-size: 0.82rem; color: var(--sonar-cyan); display: none;"></div>
+          </div>
+
+          <!-- Aba 2: Ingestão de Link / URL de Streaming -->
+          <div id="panelTabUrl" style="display: none;">
+            <div class="form-group" style="margin-bottom: 0.8rem;">
+              <label class="form-label" for="inputStreamingUrl">Link do Vídeo / Transmissão Web:</label>
+              <input type="url" id="inputStreamingUrl" class="form-input" placeholder="Cole o link do YouTube, Vimeo, Drive ou MP4 direto...">
+              <div style="font-size: 0.75rem; color: var(--text-dim); margin-top: 0.35rem;">
+                A Sonar baixa o streaming via <code>yt-dlp</code> e extrai metragens exatas sem perda de sincronia.
+              </div>
+            </div>
+          </div>
 
           <!-- Parâmetros de Processamento -->
-          <div class="form-group">
-            <label class="form-label" for="selectMode">Modo de Análise Acústica:</label>
+          <div class="form-group" style="margin-top: 1rem;">
+            <label class="form-label" for="selectMode">Modo de Análise / Acessibilidade:</label>
             <select id="selectMode" class="form-select">
               <option value="foley_only" selected>🔊 Sonoplastia & Foley Puro (Sem Diálogos - Padrão Animage)</option>
+              <option value="audiodescricao">👁️‍🗨️ Audiodescrição Roteirizada (AD - Visual, Cenas & Metragem)</option>
               <option value="full_sdh">🗣️ LSE Completo (Falas + Sonoplastia + Ruídos)</option>
               <option value="music_ambience">🎵 Trilha Musical & Ambiência Acústica</option>
             </select>
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="selectDetail">Sensibilidade da Detecção:</label>
+            <label class="form-label" for="selectDetail">Sensibilidade da Detecção Acústica:</label>
             <select id="selectDetail" class="form-select">
               <option value="high" selected>Alta Sensibilidade (Captura cliques, passos, respiração e portas)</option>
               <option value="medium">Equilibrado (Foco nos eventos principais e música)</option>
@@ -89,9 +112,9 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="selectLang">Norma / Idioma da Legenda:</label>
+            <label class="form-label" for="selectLang">Norma / Idioma da Produção:</label>
             <select id="selectLang" class="form-select">
-              <option value="pt-br" selected>Português do Brasil (ABNT NBR 15290)</option>
+              <option value="pt-br" selected>Português do Brasil (ABNT NBR 15290 / 16452)</option>
               <option value="en-us">Inglês (SDH International Guidelines)</option>
             </select>
           </div>
@@ -127,19 +150,35 @@
 
     <!-- Coluna Direita: Estúdio de Inspeção e Editor de Legenda -->
     <section class="glass-panel studio-main">
-      <div class="panel-header">
+      <div class="panel-header" style="flex-wrap: wrap; gap: 0.6rem;">
         <h2 class="panel-title">
-          <span>🎚️</span> Estúdio de Revisão & Sincronização LSE
+          <span>🎚️</span> Estúdio de Revisão & Sincronização LSE / AD
         </h2>
-        <div id="activeJobActions" style="display: flex; gap: 0.5rem;">
+        <div id="activeJobActions" style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
+          <!-- Controles de Versionamento / Snapshot -->
+          <div style="display: flex; gap: 0.2rem; background: rgba(0,0,0,0.3); padding: 2px 4px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+            <button id="btnUndo" class="btn btn-secondary btn-sm" title="Desfazer última alteração (Ctrl+Z)" disabled style="padding: 4px 8px;">
+              ↩️ Desfazer
+            </button>
+            <button id="btnRedo" class="btn btn-secondary btn-sm" title="Refazer alteração (Ctrl+Y)" disabled style="padding: 4px 8px;">
+              ↪️ Refazer
+            </button>
+            <button id="btnHistory" class="btn btn-secondary btn-sm" title="Ver Histórico de Versões e Snapshots" disabled style="padding: 4px 8px;">
+              🕒 Versões <span id="revBadge" class="rev-tag" style="margin-left: 4px;">v1</span>
+            </button>
+          </div>
+
           <button id="btnSaveEdits" class="btn btn-secondary btn-sm" disabled>
-            💾 Salvar Edição
+            💾 Salvar Versão
           </button>
           <button id="btnDownloadSrt" class="btn btn-primary btn-sm" disabled>
             📥 Baixar .SRT
           </button>
           <button id="btnDownloadVtt" class="btn btn-secondary btn-sm" disabled>
-            📄 Baixar .VTT
+            📄 .VTT
+          </button>
+          <button id="btnDownloadScript" class="btn btn-secondary btn-sm" title="Exportar Roteiro Técnico SMPTE para pós-produção" disabled>
+            📜 Roteiro SMPTE
           </button>
         </div>
       </div>
@@ -151,7 +190,7 @@
           <div class="empty-state-icon">🎧</div>
           <h3>Nenhum Filme Selecionado</h3>
           <p style="max-width: 450px; margin: 0.5rem auto 0; font-size: 0.9rem;">
-            Selecione um curta-metragem na fila de produção à esquerda para reproduzir o áudio, inspecionar a sonoplastia e editar os blocos de legenda em tempo real.
+            Selecione um curta-metragem na fila de produção à esquerda para reproduzir o vídeo/áudio, inspecionar sonoplastia ou audiodescrição e versionar cada alteração.
           </p>
         </div>
 
@@ -159,46 +198,74 @@
         <div id="studioActiveContent" style="display: none; flex-direction: column; gap: 1.2rem;">
           
           <!-- Metadados do Filme Ativo -->
-          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.8rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.8rem; flex-wrap: wrap; gap: 0.5rem;">
             <div>
               <h3 id="activeMovieTitle" style="font-size: 1.15rem; font-weight: 700; color: var(--text-main);">Nome do Arquivo</h3>
               <div id="activeMovieMeta" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">Duração: 00:00 | Modo: Sonoplastia Puro</div>
             </div>
-            <div id="activeMovieStatusBadge" class="status-badge">
-              <span id="activeMovieStatusText">Processando...</span>
-            </div>
-          </div>
-
-          <!-- Player de Áudio/Vídeo Integrado -->
-          <div class="audio-player-card">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <span style="font-size: 0.82rem; font-weight: 600; color: var(--text-muted);">Monitor Acústico da Sonar (Sincronizado)</span>
-              <div style="font-size: 0.78rem; color: var(--sonar-amber); font-family: var(--font-mono);">
-                Atalhos: [Espaço] Play/Pause | [J] -2s | [L] +2s
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <!-- Seletor de Frame Rate / Metragem SMPTE -->
+              <div style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: var(--text-dim);">
+                <span>Base SMPTE:</span>
+                <select id="selectFps" class="form-select" style="padding: 2px 6px; font-size: 0.75rem; width: auto;">
+                  <option value="24" selected>24 fps (Cinema / Animage)</option>
+                  <option value="25">25 fps (PAL / TV)</option>
+                  <option value="29.97">29.97 fps (NTSC)</option>
+                  <option value="30">30 fps (Web / Digital)</option>
+                </select>
+              </div>
+              <div id="activeMovieStatusBadge" class="status-badge">
+                <span id="activeMovieStatusText">Processando...</span>
               </div>
             </div>
-            <audio id="audioPlayer" class="native-audio" controls preload="metadata"></audio>
           </div>
 
-          <!-- Tabela de Legendas SRT -->
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div style="font-size: 0.9rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
-              <span>📝</span> Blocos de Legenda LSE Detectados (<span id="subCount">0</span>)
+          <!-- Player Híbrido: Vídeo Cinematográfico + Áudio Sincronizado -->
+          <div class="audio-player-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+              <span id="playerTypeLabel" style="font-size: 0.82rem; font-weight: 600; color: var(--text-muted);">Monitor Audiovisual da Sonar (Sincronizado)</span>
+              <div style="font-size: 0.78rem; color: var(--sonar-amber); font-family: var(--font-mono);">
+                Atalhos: [Espaço] Play/Pause | [J] -2s | [L] +2s | [Ctrl+Z] Undo | [Ctrl+Y] Redo
+              </div>
             </div>
-            <button id="btnAddSubtitle" class="btn btn-secondary btn-sm">
-              ➕ Novo Bloco
-            </button>
+
+            <!-- Vídeo (visível para curtas/vídeos) -->
+            <div id="videoContainer" class="video-preview-wrapper" style="display: none;">
+              <video id="videoPlayer" class="native-video" controls preload="metadata"></video>
+            </div>
+
+            <!-- Áudio (visível para arquivos de áudio puro) -->
+            <div id="audioContainer">
+              <audio id="audioPlayer" class="native-audio" controls preload="metadata"></audio>
+            </div>
+          </div>
+
+          <!-- Tabela de Legendas / Audiodescrição -->
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <div style="font-size: 0.9rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
+              <span>📝</span> Entradas Detectadas (<span id="subCount">0</span>)
+              <span id="entriesModeBadge" class="badge" style="background: rgba(6, 182, 212, 0.15); color: var(--sonar-cyan); font-size: 0.72rem;">LSE Foley</span>
+            </div>
+            
+            <div style="display: flex; gap: 0.4rem;">
+              <button id="btnToggleTimecodeMode" class="btn btn-secondary btn-sm" title="Alternar formato de exibição: Milissegundos (SRT) ou SMPTE (HH:MM:SS:FF)">
+                ⏱️ Modo: <strong id="lblTimecodeMode" style="color: var(--sonar-amber);">SRT (ms)</strong>
+              </button>
+              <button id="btnAddSubtitle" class="btn btn-secondary btn-sm">
+                ➕ Novo Bloco
+              </button>
+            </div>
           </div>
 
           <div class="subtitles-container">
             <table class="sub-table">
               <thead>
                 <tr>
-                  <th style="width: 50px;">#</th>
-                  <th style="width: 125px;">Início</th>
-                  <th style="width: 125px;">Fim</th>
-                  <th>Descrição do Ruído / Foley / Sonoplastia</th>
-                  <th style="width: 120px; text-align: center;">Ações</th>
+                  <th style="width: 45px;">#</th>
+                  <th style="width: 130px;">Início</th>
+                  <th style="width: 130px;">Fim</th>
+                  <th>Descrição / Foley / Roteiro de Audiodescrição</th>
+                  <th style="width: 130px; text-align: center;">Ações</th>
                 </tr>
               </thead>
               <tbody id="subtitlesTableBody">
@@ -298,6 +365,30 @@
 
       <div class="modal-footer">
         <button class="btn btn-primary" id="btnHelpCloseOk">Entendi</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Histórico de Versões e Snapshots (Undo / Redo / Rollback) -->
+  <div id="modalHistory" class="modal-overlay">
+    <div class="modal-box" style="max-width: 640px;">
+      <div class="modal-header">
+        <h3 class="modal-title">🕒 Histórico de Versões & Snapshots da Obra</h3>
+        <button class="modal-close" id="btnCloseHistory">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem;">
+          Cada edição ou intervenção na metragem é registrada de forma imutável. Você pode restaurar qualquer ponto no tempo antes do download final.
+        </p>
+
+        <div id="historyListContainer" style="max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem;">
+          <!-- Itens de histórico gerados dinamicamente via JS -->
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btnCloseHistoryFooter">Fechar</button>
       </div>
     </div>
   </div>
