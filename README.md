@@ -75,3 +75,11 @@ uv run python sonar_cli.py "C:\caminho\dos\curtas" --mode foley_only --output "C
 ## 🔑 Configuração da API
 
 Consulte o arquivo **[GUIA_CONFIGURACAO_API.md](file:///C:/Users/alexk/projects/sonar-lse-studio/GUIA_CONFIGURACAO_API.md)** para o passo a passo com link para gerar a chave gratuita no Google AI Studio e cadastrá-la com 1 clique pela tela de configurações do próprio aplicativo.
+
+---
+
+## 🌐 Ecossistema Sonar
+
+- **Site Oficial em Produção:** [https://sonaracess.vercel.app](https://sonaracess.vercel.app)
+- **Repositório do Site:** [https://github.com/alexmsza/sonar-site](https://github.com/alexmsza/sonar-site)
+- **Planejamento Estratégico & Unit Economics:** [PLANEJAMENTO_ESTRATEGICO_SONAR.md](file:///C:/Users/alexk/projects/sonar-lse-studio/PLANEJAMENTO_ESTRATEGICO_SONAR.md)
